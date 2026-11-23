@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="https://android.com">
+    <shortcut
+        android:shortcutId="open_cinepass"
+        android:enabled="true"
+        android:icon="@android:drawable/ic_menu_myplaces"
+        android:shortcutShortLabel="@string/shortcut_cinepass_short"
+        android:shortcutLongLabel="@string/shortcut_cinepass_long">
+        <intent
+            android:action="com.devlink42.cinepathe.ACTION_OPEN_CINEPASS"
+            android:targetPackage="com.devlink42.cinepathe"
+            android:targetClass="com.devlink42.cinepathe.MainActivity" />
+    </shortcut>
+</shortcuts>
