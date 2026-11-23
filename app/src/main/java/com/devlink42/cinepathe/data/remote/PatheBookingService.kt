@@ -1,12 +1,12 @@
 package com.devlink42.cinepathe.data.remote
 
+import com.devlink42.cinepathe.data.model.BookingOrderDto
 import io.ktor.client.*
+import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.serialization.Serializable
-
-// --- MODÈLES DE REQUÊTE ---
 
 @Serializable
 data class SeatAllocationRequest(
@@ -17,26 +17,29 @@ data class SeatAllocationRequest(
 @Serializable
 data class SeatPayload(
     val rowIndex: Int,
-    val rowName: String,       // ex: "J"
+    val rowName: String,
     val seatIndex: Int,
-    val seatName: String,      // ex: "2"
+    val seatName: String,
     val seatSide: String? = null,
-    val seatType: String = "STD", // "STD", "WCH" (PMR), "COMP" (Accompagnant PMR)
+    val seatType: String = "STD",
     val section: Int = 1
 )
 
-// --- SERVICE DE RÉSERVATION ---
-
 class PatheBookingService(private val client: HttpClient) {
 
+    suspend fun getBookingOrder(cinemaId: Int, orderId: String): BookingOrderDto {
+        return client.get("https://s.pathe.fr/api/fr-FR/order/$cinemaId/$orderId/booking")
+            .body()
+    }
+
     suspend fun allocateSeats(
-        cinemaId: Int,       // ex: 3337 (Pathé Aubière)
-        showingId: Int,      // ex: 148835
-        orderId: String,     // ex: "DF64F5E4-061C-4EA2-910D-D786663D4FD0"
+        cinemaId: Int,
+        showingId: Int,
+        orderId: String,
         seats: List<SeatPayload>
     ): Boolean {
         val response: HttpResponse = client.post(
-            "https://pathe.fr"
+            "https://s.pathe.fr/api/fr-FR/order/$cinemaId/$orderId/seat/allocation"
         ) {
             parameter("pos", "c2VhdGluZw==") // "seating" en Base64
             contentType(ContentType.Application.Json)
@@ -47,6 +50,13 @@ class PatheBookingService(private val client: HttpClient) {
                 )
             )
         }
+        return response.status.isSuccess()
+    }
+
+    suspend fun cancelOrder(cinemaId: Int, orderId: String): Boolean {
+        val response: HttpResponse = client.delete(
+            "https://s.pathe.fr/api/fr-FR/order/$cinemaId/$orderId"
+        )
         return response.status.isSuccess()
     }
 }

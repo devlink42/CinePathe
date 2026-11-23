@@ -3,20 +3,6 @@ package com.devlink42.cinepathe.data.model
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class BookingOrderDto(
-    val orderId: String,
-    val cinemaId: Int,
-    val orderState: String,
-    val bookingState: String,
-    val numbered: Boolean = true,
-    val screenNames: Map<String, String> = emptyMap(),
-    val amount: Int = 0,
-    val maps: List<SeatMapDto> = emptyList(), // <-- Le plan de salle complet
-    val selectionSetting: SelectionSettingDto,
-    val selection: CurrentSelectionDto
-)
-
-@Serializable
 data class SeatMapDto(
     val showingId: Int? = null,
     val sections: List<SeatSectionDto> = emptyList(),

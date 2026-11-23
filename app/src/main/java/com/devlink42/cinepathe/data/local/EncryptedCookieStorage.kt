@@ -36,9 +36,10 @@ class EncryptedCookieStorage(private val context: Context) : CookiesStorage {
     override suspend fun get(requestUrl: Url): List<Cookie> = mutex.withLock {
         val now = getTimeMillis()
         loadAllCookies().filter { cookie ->
-            val domainMatches = cookie.domain == null ||
-                    requestUrl.host.endsWith(cookie.domain.removePrefix("."))
-            val notExpired = cookie.expires == null || cookie.expires!!.timestamp > now
+            val domain = cookie.domain
+            val expires = cookie.expires
+            val domainMatches = !domain.isNullOrBlank() && requestUrl.host.endsWith(domain.removePrefix("."))
+            val notExpired = expires == null || expires.timestamp > now
             domainMatches && notExpired
         }
     }

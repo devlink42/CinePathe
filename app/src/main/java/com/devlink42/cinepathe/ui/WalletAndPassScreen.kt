@@ -23,6 +23,10 @@ import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.devlink42.cinepathe.data.local.CachedCinePass
+import com.devlink42.cinepathe.data.local.CachedTicket
+import com.devlink42.cinepathe.data.local.generateBarcodeBitmap
+import com.devlink42.cinepathe.data.local.generateQrBitmap
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,7 +62,11 @@ fun WalletAndPassScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour", tint = Color.White)
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Retour",
+                            tint = Color.White
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkSurface)
@@ -150,7 +158,8 @@ private fun CinePassFullCard(cinePass: CachedCinePass?) {
 
             if (cinePass != null) {
                 val qrBmp = remember(cinePass.cardNumber) { generateQrBitmap(cinePass.cardNumber) }
-                val barBmp = remember(cinePass.cardNumber) { generateBarcodeBitmap(cinePass.cardNumber) }
+                val barBmp =
+                    remember(cinePass.cardNumber) { generateBarcodeBitmap(cinePass.cardNumber) }
 
                 // Bloc blanc haute lisibilité pour les scanners optiques
                 Surface(color = Color.White, shape = RoundedCornerShape(16.dp)) {
@@ -207,7 +216,12 @@ private fun OfflineTicketFullCard(ticket: CachedTicket) {
             modifier = Modifier.padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(ticket.movieTitle, color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)
+            Text(
+                ticket.movieTitle,
+                color = Color.Black,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 20.sp
+            )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = dateFormatter.format(Date(ticket.startTimeMillis)),
@@ -232,11 +246,21 @@ private fun OfflineTicketFullCard(ticket: CachedTicket) {
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("PLACE", color = Color.Gray, fontSize = 11.sp)
-                    Text(ticket.seatLabel, color = Color.Black, fontWeight = FontWeight.Black, fontSize = 22.sp)
+                    Text(
+                        ticket.seatLabel,
+                        color = Color.Black,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 22.sp
+                    )
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("DOSSIER", color = Color.Gray, fontSize = 11.sp)
-                    Text(ticket.bookingCode, color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                    Text(
+                        ticket.bookingCode,
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
                 }
             }
         }

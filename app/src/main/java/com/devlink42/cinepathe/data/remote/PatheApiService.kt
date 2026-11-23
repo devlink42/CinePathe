@@ -1,11 +1,10 @@
 package com.devlink42.cinepathe.data.remote
 
+import com.devlink42.cinepathe.data.model.ShowtimeDto
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import kotlinx.serialization.Serializable
-
-// --- MODÈLES (DTO) ---
 
 @Serializable
 data class CinemaDetailsDto(
@@ -26,7 +25,7 @@ data class CinemaServiceDto(
 @Serializable
 data class PriceDto(
     val label: String,
-    val price: Int // En centimes (ex: 1350 = 13,50€)
+    val price: Int
 )
 
 @Serializable
@@ -49,9 +48,30 @@ data class MediaPathsDto(
     val sm: String? = null
 )
 
-// --- SERVICE API ---
+@Serializable
+data class CinemaShowItemDto(
+    val slug: String,
+    val title: String? = null
+)
+
+@Serializable
+data class CinemaShowsResponseDto(
+    val shows: Map<String, CinemaShowEntryDto> = emptyMap()
+)
+
+@Serializable
+data class CinemaShowEntryDto(
+    val days: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap(),
+    val bookable: Boolean = true
+)
 
 class PatheApiService(private val client: HttpClient) {
+    suspend fun getCinemaShows(cinemaSlug: String): CinemaShowsResponseDto {
+        return client.get("api/cinema/$cinemaSlug/shows") {
+            parameter("language", "fr")
+        }.body()
+    }
+
     suspend fun getCinemaDetails(cinemaSlug: String): CinemaDetailsDto {
         return client.get("api/cinema/$cinemaSlug") {
             parameter("language", "fr")
@@ -67,7 +87,7 @@ class PatheApiService(private val client: HttpClient) {
     suspend fun getShowtimes(
         showSlug: String,
         cinemaSlug: String,
-        date: String // Format "2026-11-22"
+        date: String
     ): List<ShowtimeDto> {
         return client.get("api/show/$showSlug/showtimes/$cinemaSlug/$date") {
             parameter("language", "fr")

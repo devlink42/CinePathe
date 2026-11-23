@@ -1,7 +1,10 @@
 package com.devlink42.cinepathe.data.remote
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.util.Base64
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import io.ktor.client.*
@@ -40,10 +43,10 @@ data class CinePassCardDto(
 class PatheAuthManager(context: Context, private val httpClient: HttpClient) {
 
     companion object {
-        const val AUTH0_DOMAIN = "https://pathe.me"
+        const val AUTH0_DOMAIN = "https://login.pathe.me"
         const val CLIENT_ID = "r30RbF2Mjy49xXOXSD3ELqzUuKTzag0L"
         const val AUDIENCE = "https://pathe.me/"
-        const val REDIRECT_URI = "https://pathe.fr"
+        const val REDIRECT_URI = "https://www.pathe.fr"
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -55,6 +58,22 @@ class PatheAuthManager(context: Context, private val httpClient: HttpClient) {
         EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
+
+    fun saveTokensFromWeb(accessToken: String, idToken: String, expiresAtSeconds: Long) {
+        val expiresAtMillis = if (expiresAtSeconds > 0) {
+            (expiresAtSeconds * 1000L) - 60_000L
+        } else {
+            System.currentTimeMillis() + 3600_000L
+        }
+        val claims = decodeIdToken(idToken)
+
+        prefs.edit()
+            .putString("access_token", accessToken)
+            .putString("id_token", idToken)
+            .putLong("expires_at", expiresAtMillis)
+            .putString("client_id", claims?.clientId)
+            .apply()
+    }
 
     // --- 1. GÉNÉRATION PKCE ---
 
@@ -125,4 +144,10 @@ class PatheAuthManager(context: Context, private val httpClient: HttpClient) {
     }
 
     fun getClientId(): String? = prefs.getString("client_id", null)
+
+    fun saveCinePassNumber(cardNumber: String) {
+        prefs.edit().putString("cinepass_number", cardNumber).apply()
+    }
+
+    fun getCinePassNumber(): String? = prefs.getString("cinepass_number", null)
 }

@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">CinePathe</string>
-    <string name="shortcut_cp">CinéPass</string>
-    <string name="shortcut_ccpb">Ma carte CinéPass &amp; Billets</string>
+    <string name="shortcut_cinepass_short">CinéPass</string>
+    <string name="shortcut_cinepass_long">Ouvrir mon CinéPass</string>
 </resources>

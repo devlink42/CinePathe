@@ -24,22 +24,21 @@ class PatheAccountService(
 ) {
     suspend fun getUpcomingTickets(): List<ClientBookingDto> {
         val clientId = authManager.getClientId() ?: error("Non connecté")
-        // Endpoint à confirmer via un rapide dump sur pathe.fr/mon-compte/reservations
-        return client.get("https://pathe.fr") {
+        return client.get("https://pathe.fr/api/account/$clientId/bookings") {
             parameter("language", "fr")
         }.body()
     }
-}
 
-suspend fun fetchAndCacheCinePass(): CinePassCardDto? {
-    val clientId = authManager.getClientId() ?: return null
-    val cards: List<CinePassCardDto> = client.get("https://pathe.fr") {
-        parameter("language", "fr")
-    }.body()
+    suspend fun fetchAndCacheCinePass(): CinePassCardDto? {
+        val clientId = authManager.getClientId() ?: return null
+        val cards: List<CinePassCardDto> = client.get("https://pathe.fr/api/account/$clientId/cards") {
+            parameter("language", "fr")
+        }.body()
 
-    val activePass = cards.firstOrNull { it.status.equals("ACTIVE", ignoreCase = true) }
-    if (activePass != null) {
-        authManager.saveCinePassNumber(activePass.cardNumber)
+        val activePass = cards.firstOrNull { it.status.equals("ACTIVE", ignoreCase = true) }
+        if (activePass != null) {
+            authManager.saveCinePassNumber(activePass.cardNumber)
+        }
+        return activePass
     }
-    return activePass
 }

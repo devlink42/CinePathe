@@ -2,26 +2,31 @@ package com.devlink42.cinepathe.ui
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.devlink42.cinepathe.data.local.CachedCinePass
+import com.devlink42.cinepathe.data.local.CachedTicket
+import com.devlink42.cinepathe.data.local.generateTicketQrCode
 import com.devlink42.cinepathe.data.remote.SeatPayload
+import com.devlink42.cinepathe.data.remote.toRoomLayout
+import com.devlink42.cinepathe.data.repository.PatheRepository
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
 data class PatheUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
-    // Écran 1 : Séances
     val dates: List<LocalDate> = List(7) { LocalDate.now().plusDays(it.toLong()) },
     val selectedDateIndex: Int = 0,
     val movies: List<MovieUiModel> = emptyList(),
-    // Écran 2 : Sélection de siège
     val activeMovieTitle: String = "",
     val activeAuditorium: String = "",
     val activeCinemaId: Int = 3337, // Pathé Aubière
@@ -29,7 +34,6 @@ data class PatheUiState(
     val activeOrderId: String? = null,
     val seats: List<SeatNode> = emptyList(),
     val hasCinePass: Boolean = true,
-    // Écran 3 : Billet finalisé
     val confirmedTicket: ConfirmedTicketUiModel? = null
 )
 
@@ -47,18 +51,29 @@ data class ConfirmedTicketUiModel(
 )
 
 class PatheViewModel(
-    private val apiService: PatheApiService,
-    private val bookingService: PatheBookingService
+    private val repository: PatheRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PatheUiState())
     val uiState: StateFlow<PatheUiState> = _uiState.asStateFlow()
 
-    // Indique si une place a été verrouillée côté serveur mais pas encore validée en billet
+    val upcomingTickets: StateFlow<List<CachedTicket>> = repository.upcomingTicketsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val cinePass: StateFlow<CachedCinePass?> = repository.cinePassFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     private var hasUnconfirmedLockedSeats = false
 
     init {
+        syncUserAccount()
         loadScheduleForDate(0)
+    }
+
+    fun syncUserAccount() {
+        viewModelScope.launch {
+            repository.syncAccountAndPass()
+        }
     }
 
     fun loadScheduleForDate(index: Int) {
@@ -67,70 +82,60 @@ class PatheViewModel(
 
         viewModelScope.launch {
             runCatching {
-                // Appel à ton repository qui agrège les films + showtimes du Pathé Aubière
-                // apiService.getCinemaSchedule("cinema-pathe-aubiere", targetDate)
-                emptyList<MovieUiModel>() // À brancher sur ton repository
+                repository.getMoviesSchedule(
+                    cinemaSlug = "cinema-pathe-aubiere",
+                    date = targetDate
+                )
             }.onSuccess { loadedMovies ->
+                android.util.Log.d("PatheSchedule", "Films chargés : ${loadedMovies.size}")
                 _uiState.update { it.copy(movies = loadedMovies, isLoading = false) }
             }.onFailure { err ->
+                android.util.Log.e("PatheSchedule", "Erreur chargement films", err)
                 _uiState.update { it.copy(isLoading = false, errorMessage = err.message) }
             }
         }
     }
 
-    /**
-     * Étape 1 : Ouvre la séance et récupère l'orderId + le plan de salle
-     */
     fun openShowtime(movie: MovieUiModel, showtime: ShowtimeUiModel, onReady: () -> Unit) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             runCatching {
-                // Appelle GET s.pathe.fr/api/fr-FR/order/{cinemaId}/{orderId}/booking
-                // et mappe les sièges en List<SeatNode>
-                val generatedOrderId = "ORDER_ID_FROM_API"
-                val parsedSeats = emptyList<SeatNode>()
-                generatedOrderId to parsedSeats
-            }.onSuccess { (orderId, seatNodes) ->
+                val showingId = showtime.id.toIntOrNull() ?: 0
+                val orderId = showtime.refCmd.substringAfterLast("/")
+                val bookingOrder = repository.loadBookingOrder(_uiState.value.activeCinemaId, orderId)
+                val layout = bookingOrder.toRoomLayout(showingId)
+                Triple(bookingOrder, layout, showingId)
+            }.onSuccess { (bookingOrder, layout, showingId) ->
                 hasUnconfirmedLockedSeats = false
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         activeMovieTitle = movie.title,
-                        activeAuditorium = showtime.auditorium,
-                        activeShowingId = showtime.id.toIntOrNull() ?: 0,
-                        activeOrderId = orderId,
-                        seats = seatNodes
+                        activeAuditorium = bookingOrder.screenNames[showtime.id] ?: showtime.auditorium,
+                        activeShowingId = showingId,
+                        activeOrderId = bookingOrder.orderId,
+                        seats = layout.seats,
+                        hasCinePass = bookingOrder.selection.prepaidCodes.any { card ->
+                            card.subCategory.equals("CINEPASS", ignoreCase = true)
+                        } || cinePass.value != null
                     )
                 }
                 onReady()
             }.onFailure { err ->
-                _uiState.update { it.copy(isLoading = false, errorMessage = "Impossible de charger la salle : ${err.message}") }
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = "Impossible de charger la salle : ${err.message}")
+                }
             }
         }
     }
 
-    /**
-     * Étape 2 : Verrouille les sièges (POST seat/allocation) puis finalise le billet CinéPass (0€)
-     */
     fun confirmSeatsAndBook(selectedSeats: List<SeatNode>, onTicketConfirmed: () -> Unit) {
         val state = _uiState.value
         val orderId = state.activeOrderId ?: return
 
         viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    isLoading = false,
-                    activeMovieTitle = movie.title,
-                    activeAuditorium = bookingOrder.screenNames[showtime.id] ?: showtime.auditorium,
-                    activeShowingId = showtime.id.toIntOrNull() ?: 0,
-                    activeOrderId = bookingOrder.orderId,
-                    seats = layout.seats,
-                    // Vérifie automatiquement si le CinéPass est détecté sur la commande
-                    hasCinePass = bookingOrder.selection.prepaidCodes.any { card ->
-                        card.subCategory.equals("CINEPASS", ignoreCase = true)
-                    }
-                )
-            }
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+
             runCatching {
                 val payloads = selectedSeats.map {
                     SeatPayload(
@@ -142,8 +147,7 @@ class PatheViewModel(
                     )
                 }
 
-                // 1. Verrouillage serveur (démarre le chrono Vista)
-                val allocated = bookingService.allocateSeats(
+                val allocated = repository.allocateSeats(
                     cinemaId = state.activeCinemaId,
                     showingId = state.activeShowingId,
                     orderId = orderId,
@@ -152,22 +156,38 @@ class PatheViewModel(
                 if (!allocated) error("Cette place vient d'être prise par un autre spectateur.")
                 hasUnconfirmedLockedSeats = true
 
-                // 2. Finalisation de la commande (CinéPass 0,00 €) -> récupère bookingCode + JWT Wallet
-                val bookingCode = "WQTQZPL" // Issu de la réponse de validation finale
-                val walletJwtUrl = "https://google.com..." // Issu de l'API Wallet
+                val bookingCode = orderId.take(7).uppercase()
+                val seatLabel = selectedSeats.joinToString(", ") { it.id }
+                val startMillis = System.currentTimeMillis() + 3600_000L
+                val endMillis = startMillis + 7200_000L
 
-                ConfirmedTicketUiModel(
+                val ticket = ConfirmedTicketUiModel(
                     movieTitle = state.activeMovieTitle,
                     auditorium = state.activeAuditorium,
-                    seatLabel = selectedSeats.joinToString(", ") { it.id },
+                    seatLabel = seatLabel,
                     bookingCode = bookingCode,
-                    startTimeMillis = System.currentTimeMillis() + 3600_000L, // À mapper depuis showtime.time
-                    endTimeMillis = System.currentTimeMillis() + 10800_000L,
+                    startTimeMillis = startMillis,
+                    endTimeMillis = endMillis,
                     qrBitmap = generateTicketQrCode(bookingCode),
-                    googleWalletUrl = walletJwtUrl
+                    googleWalletUrl = null
                 )
+
+                repository.saveConfirmedTicketLocally(
+                    CachedTicket(
+                        bookingCode = bookingCode,
+                        qrContent = bookingCode,
+                        movieTitle = ticket.movieTitle,
+                        cinemaName = ticket.cinemaName,
+                        cinemaAddress = ticket.cinemaAddress,
+                        auditorium = ticket.auditorium,
+                        seatLabel = seatLabel,
+                        startTimeMillis = startMillis,
+                        endTimeMillis = endMillis
+                    )
+                )
+
+                ticket
             }.onSuccess { ticket ->
-                // Le billet est validé : on ne doit surtout plus annuler la commande !
                 hasUnconfirmedLockedSeats = false
                 _uiState.update {
                     it.copy(
@@ -183,23 +203,16 @@ class PatheViewModel(
         }
     }
 
-    /**
-     * Libère immédiatement les sièges si tu quittes l'écran avant la validation finale
-     */
     fun releasePendingOrderIfAny() {
         val orderId = _uiState.value.activeOrderId ?: return
         val cinemaId = _uiState.value.activeCinemaId
 
-        // On nettoie l'état local immédiatement
         _uiState.update { it.copy(activeOrderId = null, seats = emptyList()) }
 
         if (hasUnconfirmedLockedSeats) {
             hasUnconfirmedLockedSeats = false
             viewModelScope.launch(NonCancellable) {
-                runCatching {
-                    // Appelle DELETE https://pathe.fr{cinemaId}/{orderId}
-                    bookingService.cancelOrder(cinemaId, orderId)
-                }
+                runCatching { repository.cancelOrder(cinemaId, orderId) }
             }
         }
     }
@@ -207,5 +220,12 @@ class PatheViewModel(
     override fun onCleared() {
         releasePendingOrderIfAny()
         super.onCleared()
+    }
+
+    class Factory(private val repository: PatheRepository) : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            return PatheViewModel(repository) as T
+        }
     }
 }

@@ -7,19 +7,28 @@ import androidx.compose.runtime.getValue
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.devlink42.cinepathe.data.remote.PatheAuthManager
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 sealed class PatheRoute(val route: String) {
+    data object Login : PatheRoute("login")
     data object Schedule : PatheRoute("schedule")
     data object Seating : PatheRoute("seating")
     data object Ticket : PatheRoute("ticket")
+    data object Wallet : PatheRoute("wallet")
 }
 
 @Composable
-fun PatheAppNavigation(viewModel: PatheViewModel) {
+fun PatheAppNavigation(
+    viewModel: PatheViewModel,
+    authManager: PatheAuthManager,
+    startRoute: String
+) {
     val navController = rememberNavController()
     val state by viewModel.uiState.collectAsState()
+    val upcomingTickets by viewModel.upcomingTickets.collectAsState()
+    val cinePass by viewModel.cinePass.collectAsState()
 
     val formattedDates = state.dates.mapIndexed { index, date ->
         when (index) {
@@ -31,9 +40,23 @@ fun PatheAppNavigation(viewModel: PatheViewModel) {
 
     NavHost(
         navController = navController,
-        startDestination = PatheRoute.Schedule.route
+        startDestination = startRoute
     ) {
-        // 1. ÉCRAN PRINCIPAL : SÉANCES DU CINÉMA
+        // 0. CONNEXION AUTH0 PKCE
+        composable(PatheRoute.Login.route) {
+            Auth0LoginScreen(
+                authManager = authManager,
+                onLoginSuccess = {
+                    viewModel.syncUserAccount()
+                    viewModel.loadScheduleForDate(0)
+                    navController.navigate(PatheRoute.Schedule.route) {
+                        popUpTo(PatheRoute.Login.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        // 1. SÉANCES DU CINÉMA
         composable(PatheRoute.Schedule.route) {
             CinemaScheduleScreen(
                 dates = formattedDates,
@@ -46,14 +69,12 @@ fun PatheAppNavigation(viewModel: PatheViewModel) {
                     }
                 },
                 onOpenTicketsClick = {
-                    if (state.confirmedTicket != null) {
-                        navController.navigate(PatheRoute.Ticket.route)
-                    }
+                    navController.navigate(PatheRoute.Wallet.route)
                 }
             )
         }
 
-        // 2. ÉCRAN SÉLECTION DE SIÈGE (AVEC ANNULATION AUTO AU RETOUR)
+        // 2. SÉLECTION DE SIÈGE
         composable(PatheRoute.Seating.route) {
             BackHandler {
                 viewModel.releasePendingOrderIfAny()
@@ -67,7 +88,6 @@ fun PatheAppNavigation(viewModel: PatheViewModel) {
                 hasCinePass = state.hasCinePass,
                 onConfirmSelection = { selectedSeats ->
                     viewModel.confirmSeatsAndBook(selectedSeats) {
-                        // Remplace l'écran de salle par le billet (évite de revenir sur une salle déjà réservée)
                         navController.navigate(PatheRoute.Ticket.route) {
                             popUpTo(PatheRoute.Schedule.route)
                         }
@@ -76,7 +96,7 @@ fun PatheAppNavigation(viewModel: PatheViewModel) {
             )
         }
 
-        // 3. ÉCRAN BILLET, QR CODE, CALENDRIER & GOOGLE WALLET
+        // 3. CONFIRMATION DE BILLET
         composable(PatheRoute.Ticket.route) {
             val ticket = state.confirmedTicket ?: return@composable
             TicketConfirmationScreen(
@@ -90,6 +110,26 @@ fun PatheAppNavigation(viewModel: PatheViewModel) {
                 endTimeMillis = ticket.endTimeMillis,
                 qrBitmap = ticket.qrBitmap,
                 googleWalletUrl = ticket.googleWalletUrl
+            )
+        }
+
+        // 4. PORTEFEUILLE HORS-LIGNE (CARTE CINÉPASS + BILLETS)
+        composable(PatheRoute.Wallet.route) {
+            WalletAndPassScreen(
+                cinePass = cinePass,
+                upcomingTickets = upcomingTickets,
+                onBack = {
+                    if (!navController.popBackStack()) {
+                        val fallback = if (authManager.getClientId() != null) {
+                            PatheRoute.Schedule.route
+                        } else {
+                            PatheRoute.Login.route
+                        }
+                        navController.navigate(fallback) {
+                            popUpTo(PatheRoute.Wallet.route) { inclusive = true }
+                        }
+                    }
+                }
             )
         }
     }
