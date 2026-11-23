@@ -4,14 +4,15 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import io.ktor.client.plugins.cookies.*
-import io.ktor.http.*
-import io.ktor.util.date.*
+import io.ktor.client.plugins.cookies.CookiesStorage
+import io.ktor.http.Cookie
+import io.ktor.http.Url
+import io.ktor.util.date.GMTDate
+import io.ktor.util.date.getTimeMillis
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 private val Context.cookieDataStore by preferencesDataStore(name = "pathe_encrypted_cookies")
@@ -38,7 +39,8 @@ class EncryptedCookieStorage(private val context: Context) : CookiesStorage {
         loadAllCookies().filter { cookie ->
             val domain = cookie.domain
             val expires = cookie.expires
-            val domainMatches = !domain.isNullOrBlank() && requestUrl.host.endsWith(domain.removePrefix("."))
+            val domainMatches =
+                !domain.isNullOrBlank() && requestUrl.host.endsWith(domain.removePrefix("."))
             val notExpired = expires == null || expires.timestamp > now
             domainMatches && notExpired
         }
@@ -57,7 +59,8 @@ class EncryptedCookieStorage(private val context: Context) : CookiesStorage {
     override fun close() {}
 
     private suspend fun loadAllCookies(): List<Cookie> {
-        val encrypted = context.cookieDataStore.data.first()[encryptedCookiesKey] ?: return emptyList()
+        val encrypted =
+            context.cookieDataStore.data.first()[encryptedCookiesKey] ?: return emptyList()
         val rawJson = CryptoHelper.decrypt(encrypted) ?: return emptyList()
 
         return runCatching {

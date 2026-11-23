@@ -1,9 +1,10 @@
 package com.devlink42.cinepathe.data.remote
 
 import com.devlink42.cinepathe.data.model.ShowtimeDto
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.request.*
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.request.get
+import io.ktor.client.request.parameter
 import kotlinx.serialization.Serializable
 
 @Serializable
