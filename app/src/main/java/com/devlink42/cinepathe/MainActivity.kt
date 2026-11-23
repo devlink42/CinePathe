@@ -32,7 +32,8 @@ class MainActivity : ComponentActivity() {
             apiService = PatheApiService(httpClient),
             bookingService = PatheBookingService(httpClient),
             accountService = PatheAccountService(httpClient, authManager),
-            offlineStore = offlineStore
+            offlineStore = offlineStore,
+            authManager = authManager
         )
 
         val openCinePassDirectly = intent?.action == "com.devlink42.cinepathe.ACTION_OPEN_CINEPASS"

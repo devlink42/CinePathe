@@ -59,6 +59,12 @@ fun PatheAppNavigation(
         // 1. SÉANCES DU CINÉMA
         composable(PatheRoute.Schedule.route) {
             CinemaScheduleScreen(
+                selectedCinema = state.selectedCinema,
+                availableCinemas = state.availableCinemas,
+                showCinemaPicker = state.showCinemaPicker,
+                onOpenCinemaPicker = { viewModel.openCinemaPicker() },
+                onCloseCinemaPicker = { viewModel.closeCinemaPicker() },
+                onSelectCinema = { viewModel.selectCinema(it) },
                 dates = formattedDates,
                 selectedDateIndex = state.selectedDateIndex,
                 onDateSelected = { viewModel.loadScheduleForDate(it) },

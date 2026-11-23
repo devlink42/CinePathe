@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.devlink42.cinepathe.data.local.CachedCinePass
 import com.devlink42.cinepathe.data.local.CachedTicket
 import com.devlink42.cinepathe.data.local.generateTicketQrCode
+import com.devlink42.cinepathe.data.model.CinemaInfo
 import com.devlink42.cinepathe.data.remote.SeatPayload
 import com.devlink42.cinepathe.data.remote.toRoomLayout
 import com.devlink42.cinepathe.data.repository.PatheRepository
@@ -24,12 +25,15 @@ import java.time.format.DateTimeFormatter
 data class PatheUiState(
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
+    val selectedCinema: CinemaInfo? = null,
+    val availableCinemas: List<CinemaInfo> = emptyList(),
+    val showCinemaPicker: Boolean = false,
     val dates: List<LocalDate> = List(7) { LocalDate.now().plusDays(it.toLong()) },
     val selectedDateIndex: Int = 0,
     val movies: List<MovieUiModel> = emptyList(),
     val activeMovieTitle: String = "",
     val activeAuditorium: String = "",
-    val activeCinemaId: Int = 3337, // Pathé Aubière
+    val activeCinemaId: Int = 0,
     val activeShowingId: Int = 0,
     val activeOrderId: String? = null,
     val seats: List<SeatNode> = emptyList(),
@@ -39,8 +43,8 @@ data class PatheUiState(
 
 data class ConfirmedTicketUiModel(
     val movieTitle: String,
-    val cinemaName: String = "Pathé Aubière",
-    val cinemaAddress: String = "Avenue Lavoisier, 63170 Aubière",
+    val cinemaName: String,
+    val cinemaAddress: String,
     val auditorium: String,
     val seatLabel: String,
     val bookingCode: String,
@@ -54,7 +58,15 @@ class PatheViewModel(
     private val repository: PatheRepository
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(PatheUiState())
+    private val initialCinema = repository.getSavedCinema()
+
+    private val _uiState = MutableStateFlow(
+        PatheUiState(
+            selectedCinema = initialCinema,
+            activeCinemaId = initialCinema?.cinemaId ?: 0,
+            showCinemaPicker = initialCinema == null
+        )
+    )
     val uiState: StateFlow<PatheUiState> = _uiState.asStateFlow()
 
     val upcomingTickets: StateFlow<List<CachedTicket>> = repository.upcomingTicketsFlow
@@ -67,7 +79,10 @@ class PatheViewModel(
 
     init {
         syncUserAccount()
-        loadScheduleForDate(0)
+        loadCinemasList()
+        if (initialCinema != null) {
+            loadScheduleForDate(0)
+        }
     }
 
     fun syncUserAccount() {
@@ -76,14 +91,50 @@ class PatheViewModel(
         }
     }
 
+    fun loadCinemasList() {
+        viewModelScope.launch {
+            runCatching { repository.getAllCinemas() }
+                .onSuccess { list ->
+                    _uiState.update { it.copy(availableCinemas = list) }
+                }
+        }
+    }
+
+    fun openCinemaPicker() {
+        if (_uiState.value.availableCinemas.isEmpty()) {
+            loadCinemasList()
+        }
+        _uiState.update { it.copy(showCinemaPicker = true) }
+    }
+
+    fun closeCinemaPicker() {
+        if (_uiState.value.selectedCinema != null) {
+            _uiState.update { it.copy(showCinemaPicker = false) }
+        }
+    }
+
+    fun selectCinema(cinema: CinemaInfo) {
+        repository.saveSelectedCinema(cinema)
+        _uiState.update {
+            it.copy(
+                selectedCinema = cinema,
+                activeCinemaId = cinema.cinemaId,
+                showCinemaPicker = false,
+                movies = emptyList()
+            )
+        }
+        loadScheduleForDate(_uiState.value.selectedDateIndex)
+    }
+
     fun loadScheduleForDate(index: Int) {
+        val cinema = _uiState.value.selectedCinema ?: return
         _uiState.update { it.copy(selectedDateIndex = index, isLoading = true, errorMessage = null) }
         val targetDate = _uiState.value.dates[index].format(DateTimeFormatter.ISO_LOCAL_DATE)
 
         viewModelScope.launch {
             runCatching {
                 repository.getMoviesSchedule(
-                    cinemaSlug = "cinema-pathe-aubiere",
+                    cinemaSlug = cinema.slug,
                     date = targetDate
                 )
             }.onSuccess { loadedMovies ->
@@ -132,6 +183,7 @@ class PatheViewModel(
     fun confirmSeatsAndBook(selectedSeats: List<SeatNode>, onTicketConfirmed: () -> Unit) {
         val state = _uiState.value
         val orderId = state.activeOrderId ?: return
+        val cinema = state.selectedCinema ?: return
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
@@ -163,6 +215,8 @@ class PatheViewModel(
 
                 val ticket = ConfirmedTicketUiModel(
                     movieTitle = state.activeMovieTitle,
+                    cinemaName = cinema.name,
+                    cinemaAddress = cinema.address,
                     auditorium = state.activeAuditorium,
                     seatLabel = seatLabel,
                     bookingCode = bookingCode,

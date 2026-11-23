@@ -4,8 +4,10 @@ import com.devlink42.cinepathe.data.local.CachedCinePass
 import com.devlink42.cinepathe.data.local.CachedTicket
 import com.devlink42.cinepathe.data.local.OfflineTicketsStore
 import com.devlink42.cinepathe.data.model.BookingOrderDto
+import com.devlink42.cinepathe.data.model.CinemaInfo
 import com.devlink42.cinepathe.data.remote.PatheAccountService
 import com.devlink42.cinepathe.data.remote.PatheApiService
+import com.devlink42.cinepathe.data.remote.PatheAuthManager
 import com.devlink42.cinepathe.data.remote.PatheBookingService
 import com.devlink42.cinepathe.data.remote.SeatPayload
 import com.devlink42.cinepathe.ui.MovieUiModel
@@ -19,10 +21,19 @@ class PatheRepository(
     private val apiService: PatheApiService,
     private val bookingService: PatheBookingService,
     private val accountService: PatheAccountService,
-    private val offlineStore: OfflineTicketsStore
+    private val offlineStore: OfflineTicketsStore,
+    private val authManager: PatheAuthManager
 ) {
     val upcomingTicketsFlow: Flow<List<CachedTicket>> = offlineStore.upcomingTicketsFlow
     val cinePassFlow: Flow<CachedCinePass?> = offlineStore.cinePassFlow
+
+    fun getSavedCinema(): CinemaInfo? = authManager.getSelectedCinema()
+
+    fun saveSelectedCinema(cinema: CinemaInfo) {
+        authManager.saveSelectedCinema(cinema)
+    }
+
+    suspend fun getAllCinemas(): List<CinemaInfo> = apiService.getAllCinemas()
 
     suspend fun syncAccountAndPass() {
         runCatching {

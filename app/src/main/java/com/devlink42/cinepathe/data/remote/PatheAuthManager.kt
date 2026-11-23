@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Base64
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.devlink42.cinepathe.data.model.CinemaInfo
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
@@ -73,6 +74,15 @@ class PatheAuthManager(context: Context, private val httpClient: HttpClient) {
             .putLong("expires_at", expiresAtMillis)
             .putString("client_id", claims?.clientId)
             .apply()
+    }
+
+    fun saveSelectedCinema(cinema: CinemaInfo) {
+        prefs.edit().putString("selected_cinema", Json.encodeToString(cinema)).apply()
+    }
+
+    fun getSelectedCinema(): CinemaInfo? {
+        val raw = prefs.getString("selected_cinema", null) ?: return null
+        return runCatching { Json.decodeFromString<CinemaInfo>(raw) }.getOrNull()
     }
 
     // --- 1. GÉNÉRATION PKCE ---

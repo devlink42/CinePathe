@@ -135,15 +135,6 @@ fun Auth0LoginScreen(
                             }
                         }, "AndroidAuthBridge")
 
-                        webChromeClient = object : android.webkit.WebChromeClient() {
-                            override fun onConsoleMessage(msg: android.webkit.ConsoleMessage): Boolean {
-                                if (msg.message().contains("PATHE_API_CALL")) {
-                                    android.util.Log.d("PatheSniffer", msg.message())
-                                }
-                                return true
-                            }
-                        }
-
                         webViewClient = object : WebViewClient() {
                             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                                 isLoadingPage = true
@@ -155,9 +146,6 @@ fun Auth0LoginScreen(
                                         window.fetch = function() {
                                             var args = arguments;
                                             var reqUrl = (typeof args[0] === 'string') ? args[0] : (args[0] && args[0].url) || '';
-                                            if (reqUrl.indexOf('/api/') !== -1 || reqUrl.indexOf('pathe.fr') !== -1) {
-                                                console.log('PATHE_API_CALL: ' + reqUrl);
-                                            }
                                             return origFetch.apply(this, args).then(function(response) {
                                                 if (reqUrl.indexOf('/oauth/token') !== -1) {
                                                     response.clone().json().then(function(data) {
