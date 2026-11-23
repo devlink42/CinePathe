@@ -31,13 +31,13 @@ data class MovieUiModel(
 )
 
 data class ShowtimeUiModel(
-    val id: String,          // ex: "148835"
-    val refCmd: String,      // ex: "https://pathe.fr"
+    val id: String,            // ex: "148835"
+    val refCmd: String,        // ex: "https://pathe.fr"
     val timeFormatted: String, // "10:15"
     val endFormatted: String,  // "13:13"
-    val version: String,     // "VF" ou "VOST"
-    val formatTag: String?,  // "IMAX", "4DX", null
-    val auditorium: String   // "Salle 4"
+    val version: String,       // "VF" ou "VOST"
+    val formatTag: String?,    // "IMAX", "4DX", null
+    val auditorium: String     // "Salle 4"
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -52,7 +52,7 @@ fun CinemaScheduleScreen(
     onOpenTicketsClick: () -> Unit
 ) {
     var activeFilter by remember { mutableStateOf<String?>(null) }
-    val filters = listOf("VOST", "VF", "IMAX", "4DX")
+    val filters = listOf("VF", "IMAX", "4DX", "VOST")
 
     Scaffold(
         containerColor = DarkSurface,
