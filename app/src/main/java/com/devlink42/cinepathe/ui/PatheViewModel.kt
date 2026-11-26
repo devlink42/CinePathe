@@ -85,6 +85,10 @@ class PatheViewModel(
         }
     }
 
+    fun clearError() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
+
     fun syncUserAccount() {
         viewModelScope.launch {
             repository.syncAccountAndPass()
@@ -151,19 +155,20 @@ class PatheViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             runCatching {
-                val showingId = showtime.id.toIntOrNull() ?: 0
-                val orderId = showtime.refCmd.substringAfterLast("/")
-                val bookingOrder = repository.loadBookingOrder(_uiState.value.activeCinemaId, orderId)
-                val layout = bookingOrder.toRoomLayout(showingId)
-                Triple(bookingOrder, layout, showingId)
-            }.onSuccess { (bookingOrder, layout, showingId) ->
+                val (resolvedCinemaId, resolvedShowingId, bookingOrder) =
+                    repository.startBookingFromShowtime(_uiState.value.activeCinemaId, showtime.refCmd)
+                val layout = bookingOrder.toRoomLayout(resolvedShowingId)
+                Triple(resolvedCinemaId, resolvedShowingId, Pair(bookingOrder, layout))
+            }.onSuccess { (resolvedCinemaId, resolvedShowingId, pair) ->
+                val (bookingOrder, layout) = pair
                 hasUnconfirmedLockedSeats = false
                 _uiState.update {
                     it.copy(
                         isLoading = false,
+                        activeCinemaId = resolvedCinemaId,
                         activeMovieTitle = movie.title,
-                        activeAuditorium = bookingOrder.screenNames[showtime.id] ?: showtime.auditorium,
-                        activeShowingId = showingId,
+                        activeAuditorium = bookingOrder.screenNames[resolvedShowingId.toString()] ?: showtime.auditorium,
+                        activeShowingId = resolvedShowingId,
                         activeOrderId = bookingOrder.orderId,
                         seats = layout.seats,
                         hasCinePass = bookingOrder.selection.prepaidCodes.any { card ->
@@ -173,8 +178,12 @@ class PatheViewModel(
                 }
                 onReady()
             }.onFailure { err ->
+                android.util.Log.e("PatheBooking", "Erreur ouverture séance", err)
                 _uiState.update {
-                    it.copy(isLoading = false, errorMessage = "Impossible de charger la salle : ${err.message}")
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "Impossible d'ouvrir la séance : ${err.message}"
+                    )
                 }
             }
         }
@@ -243,6 +252,7 @@ class PatheViewModel(
                 ticket
             }.onSuccess { ticket ->
                 hasUnconfirmedLockedSeats = false
+                repository.closeBookingSession()
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -258,16 +268,17 @@ class PatheViewModel(
     }
 
     fun releasePendingOrderIfAny() {
-        val orderId = _uiState.value.activeOrderId ?: return
+        val orderId = _uiState.value.activeOrderId
         val cinemaId = _uiState.value.activeCinemaId
 
         _uiState.update { it.copy(activeOrderId = null, seats = emptyList()) }
 
-        if (hasUnconfirmedLockedSeats) {
-            hasUnconfirmedLockedSeats = false
-            viewModelScope.launch(NonCancellable) {
+        viewModelScope.launch(NonCancellable) {
+            if (orderId != null && hasUnconfirmedLockedSeats) {
+                hasUnconfirmedLockedSeats = false
                 runCatching { repository.cancelOrder(cinemaId, orderId) }
             }
+            repository.closeBookingSession()
         }
     }
 

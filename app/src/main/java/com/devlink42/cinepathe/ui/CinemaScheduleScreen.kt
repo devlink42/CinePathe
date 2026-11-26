@@ -1,5 +1,6 @@
 package com.devlink42.cinepathe.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -88,7 +89,10 @@ fun CinemaScheduleScreen(
     onOpenCinemaPicker: () -> Unit = {},
     onCloseCinemaPicker: () -> Unit = {},
     onSelectCinema: (CinemaInfo) -> Unit = {},
-    dates: List<String>, // ex: ["Aujourd'hui", "Dim. 22", "Lun. 23"...]
+    isLoading: Boolean = false,
+    errorMessage: String? = null,
+    onDismissError: () -> Unit = {},
+    dates: List<String>,
     selectedDateIndex: Int,
     onDateSelected: (Int) -> Unit,
     movies: List<MovieUiModel>,
@@ -145,7 +149,6 @@ fun CinemaScheduleScreen(
                     }
                 },
                 actions = {
-                    // Accès direct en 1 tap aux billets & carte CinéPass
                     FilledTonalButton(
                         onClick = onOpenTicketsClick,
                         colors = ButtonDefaults.filledTonalButtonColors(containerColor = PatheGold)
@@ -157,61 +160,100 @@ fun CinemaScheduleScreen(
             )
         }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-            // 1. Sélecteur de dates horizontal
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(dates.size) { index ->
-                    val isSelected = index == selectedDateIndex
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { onDateSelected(index) },
-                        label = { Text(dates[index]) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = PatheGold,
-                            selectedLabelColor = Color.Black,
-                            labelColor = Color.White
+        Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Bandeau d'erreur visible si une requête échoue
+                if (errorMessage != null) {
+                    Surface(
+                        color = Color(0xFF4A1818),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = errorMessage,
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = onDismissError) {
+                                Text("OK", color = PatheGold)
+                            }
+                        }
+                    }
+                }
+
+                // 1. Sélecteur de dates horizontal
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(dates.size) { index ->
+                        val isSelected = index == selectedDateIndex
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onDateSelected(index) },
+                            label = { Text(dates[index]) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = PatheGold,
+                                selectedLabelColor = Color.Black,
+                                labelColor = Color.White
+                            )
                         )
-                    )
+                    }
+                }
+
+                // 2. Filtres rapides (VOST / IMAX / 4DX)
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(filters) { filter ->
+                        val selected = activeFilter == filter
+                        FilterChip(
+                            selected = selected,
+                            onClick = { activeFilter = if (selected) null else filter },
+                            label = { Text(filter) }
+                        )
+                    }
+                }
+
+                // 3. Liste des films et horaires directs
+                LazyColumn(
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(movies, key = { it.slug }) { movie ->
+                        val filteredShowtimes = movie.showtimes.filter { st ->
+                            activeFilter == null ||
+                                    st.version.equals(activeFilter, ignoreCase = true) ||
+                                    st.formatTag.equals(activeFilter, ignoreCase = true)
+                        }
+
+                        if (filteredShowtimes.isNotEmpty()) {
+                            MovieCard(
+                                movie = movie,
+                                showtimes = filteredShowtimes,
+                                onShowtimeClick = { onShowtimeClick(movie, it) }
+                            )
+                        }
+                    }
                 }
             }
 
-            // 2. Filtres rapides (VOST / IMAX / 4DX)
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(filters) { filter ->
-                    val selected = activeFilter == filter
-                    FilterChip(
-                        selected = selected,
-                        onClick = { activeFilter = if (selected) null else filter },
-                        label = { Text(filter) }
-                    )
-                }
-            }
-
-            // 3. Liste des films et horaires directs
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(movies, key = { it.slug }) { movie ->
-                    val filteredShowtimes = movie.showtimes.filter { st ->
-                        activeFilter == null ||
-                                st.version.equals(activeFilter, ignoreCase = true) ||
-                                st.formatTag.equals(activeFilter, ignoreCase = true)
-                    }
-
-                    if (filteredShowtimes.isNotEmpty()) {
-                        MovieCard(
-                            movie = movie,
-                            showtimes = filteredShowtimes,
-                            onShowtimeClick = { onShowtimeClick(movie, it) }
-                        )
-                    }
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.45f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = PatheGold)
                 }
             }
         }
@@ -329,7 +371,6 @@ private fun MovieCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Grille d'horaires cliquables directement
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)

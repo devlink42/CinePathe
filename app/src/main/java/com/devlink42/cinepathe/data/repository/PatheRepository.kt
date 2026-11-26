@@ -120,6 +120,13 @@ class PatheRepository(
         }
     }
 
+    suspend fun startBookingFromShowtime(
+        cinemaId: Int,
+        refCmd: String
+    ): Triple<Int, Int, BookingOrderDto> {
+        return bookingService.startBookingFromRefCmd(cinemaId, refCmd)
+    }
+
     suspend fun loadBookingOrder(cinemaId: Int, orderId: String): BookingOrderDto {
         return bookingService.getBookingOrder(cinemaId, orderId)
     }
@@ -135,6 +142,10 @@ class PatheRepository(
 
     suspend fun cancelOrder(cinemaId: Int, orderId: String) {
         bookingService.cancelOrder(cinemaId, orderId)
+    }
+
+    suspend fun closeBookingSession() {
+        bookingService.destroyActiveWebView()
     }
 
     suspend fun saveConfirmedTicketLocally(ticket: CachedTicket) {

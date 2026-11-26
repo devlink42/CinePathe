@@ -30,7 +30,7 @@ class MainActivity : ComponentActivity() {
         val offlineStore = OfflineTicketsStore(applicationContext)
         val repository = PatheRepository(
             apiService = PatheApiService(httpClient),
-            bookingService = PatheBookingService(httpClient),
+            bookingService = PatheBookingService(httpClient, applicationContext, authManager),
             accountService = PatheAccountService(httpClient, authManager),
             offlineStore = offlineStore,
             authManager = authManager
