@@ -23,33 +23,33 @@ fun BookingOrderDto.toRoomLayout(targetShowingId: Int? = null): ParsedRoomLayout
     val seatNodes = mutableListOf<SeatNode>()
     val rowLabels = mutableMapOf<Int, String>()
 
-    for (row in allRows) {
-        val cleanRowName = row.rowName?.trim().orEmpty()
+    for ((rowIndex, rowName, seats) in allRows) {
+        val cleanRowName = rowName?.trim().orEmpty()
         if (cleanRowName.isNotEmpty()) {
-            rowLabels[row.rowIndex] = cleanRowName
+            rowLabels[rowIndex] = cleanRowName
         }
 
-        for (seat in row.seats) {
-            val cleanSeatName = seat.seatName?.trim().orEmpty()
+        for ((seatIndex, seatName, seatType, status) in seats) {
+            val cleanSeatName = seatName?.trim().orEmpty()
 
             // Ignore les cases vides de la matrice (allées verticales, escaliers, espaces)
             val isRealSeat = cleanSeatName.isNotEmpty() &&
-                    !seat.seatType.equals("EMPTY", ignoreCase = true) &&
-                    !seat.status.equals("EMPTY", ignoreCase = true)
+                    !seatType.equals("EMPTY", ignoreCase = true) &&
+                    !status.equals("EMPTY", ignoreCase = true)
 
             if (!isRealSeat) continue
 
-            val isAvailable = seat.status.equals("AVAILABLE", ignoreCase = true) ||
-                    seat.status.equals("FREE", ignoreCase = true)
+            val isAvailable = status.equals("AVAILABLE", ignoreCase = true) ||
+                    status.equals("FREE", ignoreCase = true)
 
-            val isPmr = seat.seatType.equals("WCH", ignoreCase = true) ||
-                    seat.seatType.equals("COMP", ignoreCase = true)
+            val isPmr = seatType.equals("WCH", ignoreCase = true) ||
+                    seatType.equals("COMP", ignoreCase = true)
 
             seatNodes.add(
                 SeatNode(
                     id = "$cleanRowName$cleanSeatName", // ex: "J2"
-                    rowIndex = row.rowIndex,
-                    colIndex = seat.seatIndex,
+                    rowIndex = rowIndex,
+                    colIndex = seatIndex,
                     rowName = cleanRowName,
                     seatName = cleanSeatName,
                     isAvailable = isAvailable,
