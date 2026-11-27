@@ -83,7 +83,6 @@ class PatheBookingService(
         fun onAuthCaptured(authHeader: String) {
             if (authHeader.startsWith("Bearer ", ignoreCase = true)) {
                 capturedAuthHeader = authHeader
-                Log.d("PatheBooking", "Jeton Authorization capturé depuis WebView")
             }
         }
     }
@@ -109,6 +108,19 @@ class PatheBookingService(
             ?: error("Délai dépassé lors de l'initialisation de la séance sur s.pathe.fr")
 
         val bookingOrder = getBookingOrder(cinemaId, orderId)
+
+        if (resolvedShowingId > 0 && activeWebView != null) {
+            val (mapStatus, mapRaw) = fetchViaWebView(
+                "https://s.pathe.fr/api/seatmap/fr-FR/$cinemaId/$resolvedShowingId/map"
+            )
+            Log.d("PatheSeatMap", "MAP ($mapStatus): ${mapRaw.take(1500)}")
+
+            val (seatingStatus, seatingRaw) = fetchViaWebView(
+                "https://s.pathe.fr/api/order/fr-FR/$cinemaId/$resolvedShowingId/seating"
+            )
+            Log.d("PatheSeatMap", "SEATING ($seatingStatus): ${seatingRaw.take(1500)}")
+        }
+
         return Triple(cinemaId, resolvedShowingId, bookingOrder)
     }
 
@@ -178,7 +190,6 @@ class PatheBookingService(
                     }
 
                     cookieManager.flush()
-                    Log.d("PatheBooking", "OrderId capturé : cinemaId=$cId, orderId=$oId")
                     if (continuation.isActive) {
                         continuation.resume(cId to oId)
                     }
@@ -323,7 +334,6 @@ class PatheBookingService(
             response.status.value to response.bodyAsText()
         }
 
-        // Si le jeton Auth0 silencieuse d'Angular arrivait juste après, on retente une fois
         if (status == 401 && activeWebView != null) {
             delay(400L)
             val retry = fetchViaWebView(url)
@@ -331,7 +341,7 @@ class PatheBookingService(
             raw = retry.second
         }
 
-        Log.d("PatheBooking", "GET booking status=$status body=${raw.take(500)}")
+        Log.d("PatheSeatMap", "BOOKING ($status): ${raw.take(1500)}")
         if (status !in 200..299) {
             error("Erreur serveur Pathé ($status) lors du chargement de la salle.")
         }
